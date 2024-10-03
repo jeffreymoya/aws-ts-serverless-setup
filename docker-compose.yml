@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # LocalStack service to mock AWS services locally
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports:
+      - "4566:4566"    # LocalStack main port for all services
+      - "4571:4571"    # Cognito service
+    environment:
+      - SERVICES=lambda,sqs,apigateway,cloudwatch,iam,secretsmanager,events,sns,cognito
+      - DEFAULT_REGION=us-east-1
+      - LAMBDA_EXECUTOR=docker-reuse
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"  # For Lambda execution
+      - "./localstack_data:/tmp/localstack"          # Persisted data for LocalStack
+
+  # Redis for caching (replacement for ElastiCache)
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - "redis_data:/data"
+
+  # Postgres database for user management or other data
+  postgres:
+    image: postgres:13-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: saas_db
+    volumes:
+      - "pg_data:/var/lib/postgresql/data"
+
+  # Terraform service to manage AWS infrastructure
+  terraform:
+    image: hashicorp/terraform:1.5.5  # Use the latest Terraform image
+    container_name: terraform
+    working_dir: /workspace
+    volumes:
+      - .:/workspace                   # Mount the current directory as a volume
+      - "/var/run/docker.sock:/var/run/docker.sock"  # Access Docker socket
+    entrypoint: ["sh", "-c"]
+    command: |
+      terraform init &&
+      terraform plan &&
+      terraform apply -auto-approve
+    environment:
+      AWS_ACCESS_KEY_ID: "test"
+      AWS_SECRET_ACCESS_KEY: "test"
+      AWS_REGION: "us-east-1"
+    depends_on:
+      - localstack
+    networks:
+      - localstack-network
+
+  # Application service running Node.js and TypeScript
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saas-app
+    depends_on:
+      - localstack
+      - redis
+      - postgres
+      - terraform
+    environment:
+      NODE_ENV: development
+      AWS_ACCESS_KEY_ID: "test"
+      AWS_SECRET_ACCESS_KEY: "test"
+      AWS_REGION: "us-east-1"
+      AWS_SQS_URL: "http://localstack:4566/000000000000/saas-main-queue"
+      AWS_SECRETS_MANAGER_URL: "http://localstack:4566"
+      AWS_COGNITO_URL: "http://localstack:4566"
+      REDIS_URL: "redis://redis:6379"
+      DATABASE_URL: "postgresql://admin:admin@postgres:5432/saas_db"
+    ports:
+      - "3000:3000"
+    command: "npm run dev"  # Run your application development server (replace with your actual command)
+
+networks:
+  localstack-network:
+
+volumes:
+  redis_data:
+  pg_data:
+  localstack_data:
