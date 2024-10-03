@@ -1,0 +1,54 @@
+{
+  "Comment": "Step Function for User Creation Workflow",
+  "StartAt": "CreateUser",
+  "States": {
+    "CreateUser": {
+      "Type": "Task",
+      "Resource": "${create_user_lambda_arn}",
+      "Next": "ValidateUser",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "CreateUserFailed"
+        }
+      ]
+    },
+    "CreateUserFailed": {
+      "Type": "Fail",
+      "Cause": "Failed to create user",
+      "Error": "UserCreationError"
+    },
+    "ValidateUser": {
+      "Type": "Task",
+      "Resource": "${validate_user_lambda_arn}",
+      "Next": "NotifyUser",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ValidationFailed"
+        }
+      ]
+    },
+    "ValidationFailed": {
+      "Type": "Fail",
+      "Cause": "User validation failed",
+      "Error": "UserValidationError"
+    },
+    "NotifyUser": {
+      "Type": "Task",
+      "Resource": "${notify_user_lambda_arn}",
+      "End": true,
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "NotificationFailed"
+        }
+      ]
+    },
+    "NotificationFailed": {
+      "Type": "Fail",
+      "Cause": "Failed to notify user",
+      "Error": "NotificationError"
+    }
+  }
+}

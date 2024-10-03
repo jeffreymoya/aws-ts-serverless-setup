@@ -9,7 +9,7 @@ services:
       - "4566:4566"    # LocalStack main port for all services
       - "4571:4571"    # Cognito service
     environment:
-      - SERVICES=lambda,sqs,apigateway,cloudwatch,iam,secretsmanager,events,sns,cognito
+      - SERVICES=lambda,sqs,apigateway,cloudwatch,iam,secretsmanager,events,sns,cognito,stepfunctions
       - DEFAULT_REGION=us-east-1
       - LAMBDA_EXECUTOR=docker-reuse
       - DOCKER_HOST=unix:///var/run/docker.sock
@@ -43,23 +43,24 @@ services:
   terraform:
     image: hashicorp/terraform:1.5.5  # Use the latest Terraform image
     container_name: terraform
-    working_dir: /workspace
+    working_dir: /workspace/environments/dev  # Set working directory to the dev environment
     volumes:
-      - .:/workspace                   # Mount the current directory as a volume
-      - "/var/run/docker.sock:/var/run/docker.sock"  # Access Docker socket
-    entrypoint: ["sh", "-c"]
-    command: |
-      terraform init &&
-      terraform plan &&
-      terraform apply -auto-approve
+      - .:/workspace                   # Mount the project directory to /workspace
+      - "/var/run/docker.sock:/var/run/docker.sock"  # Access Docker socket for LocalStack
     environment:
-      AWS_ACCESS_KEY_ID: "test"
+      AWS_ACCESS_KEY_ID: "test"        # Use LocalStack mock credentials
       AWS_SECRET_ACCESS_KEY: "test"
       AWS_REGION: "us-east-1"
     depends_on:
       - localstack
     networks:
       - localstack-network
+    command: >
+      /bin/sh -c "
+      terraform init &&
+      terraform plan -var-file=/workspace/environments/dev/terraform.tfvars &&
+      terraform apply -var-file=/workspace/environments/dev/terraform.tfvars -auto-approve
+      "
 
   # Application service running Node.js and TypeScript
   app:
