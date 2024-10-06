@@ -102,6 +102,28 @@ module "lambda_authorizer" {
   authorizer_result_ttl_in_seconds = 300
 }
 
+# Call the Glue module
+module "glue" {
+  source                 = "../../modules/glue"
+  glue_job_name          = "dev-data-etl-job"
+  glue_database_name     = "dev-data-catalog"
+  glue_job_role_name     = "dev-glue-job-role"
+  glue_job_policy_name   = "dev-glue-job-policy"
+  script_location        = "s3://my-bucket/scripts/glue_script.py"
+  input_s3_bucket_arn    = "arn:aws:s3:::my-input-bucket"
+  output_s3_bucket_arn   = "arn:aws:s3:::my-output-bucket"
+}
+
+# Call the EventBridge module
+module "eventbridge" {
+  source                     = "../../modules/eventbridge"
+  glue_trigger_rule_name     = "dev-glue-trigger-rule"
+  lambda_trigger_rule_name   = "dev-lambda-trigger-rule"
+  glue_job_arn               = module.glue.glue_job_arn
+  lambda_function_name       = module.lambda.lambda_function_name
+  lambda_function_arn        = module.lambda.lambda_arn
+  s3_event_rule_name         = "dev-s3-event-rule"
+}
 
 
 
